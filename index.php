@@ -40,9 +40,25 @@ $values = getCookieJson('form_values') ?? [];
 $is_logged = isset($_SESSION['user_id']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     if (isset($_POST['login_form'])) {
-    } else {
+        $login = trim($_POST['login'] ?? '');
+        $pass  = $_POST['password'] ?? '';
+
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE login = ?");
+        $stmt->execute([$login]);
+        $user = $stmt->fetch();
+
+        if ($user && password_verify($pass, $user['password_hash'])) {
+            $_SESSION['user_id'] = $user['application_id'];
+            header('Location: index.php');
+            exit;
+        } else {
+            $_SESSION['success_message'] = '<span style="color:red">Ошибка: Неверный логин или пароль</span>';
+            header('Location: index.php');
+            exit;
+        }
+    } 
+    else {
         $fio = trim($_POST['fio'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $email = trim($_POST['email'] ?? '');
@@ -55,13 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors = [];
         $values = ['fio'=>$fio,'phone'=>$phone,'email'=>$email,'birth_date'=>$birth_date,'gender'=>$gender,'languages'=>$languages,'biography'=>$biography,'contract'=>$contract];
 
-        if (empty($fio) || !preg_match('/^[a-zA-Zа-яА-ЯёЁ\s]+$/u', $fio) || strlen($fio) > 150) $errors['fio'] = 'Только буквы и пробелы';
+        if (empty($fio) || !preg_match('/^[a-zA-Zа-яА-ЯёЁ\s]+$/u', $fio)) $errors['fio'] = 'Введите корректное ФИО';
         if (empty($phone) || !preg_match('/^\+?[\d\s\-\(\)]{10,20}$/', $phone)) $errors['phone'] = 'Неверный формат телефона';
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors['email'] = 'Неверный email';
-        if (empty($birth_date) || !strtotime($birth_date)) $errors['birth_date'] = 'Неверная дата';
+        if (empty($birth_date)) $errors['birth_date'] = 'Укажите дату рождения';
         if (!in_array($gender, ['male', 'female'])) $errors['gender'] = 'Выберите пол';
-        if (empty($languages)) $errors['languages'] = 'Выберите язык';
-        if ($contract === 0) $errors['contract'] = 'Ознакомьтесь с контрактом';
+        if (empty($languages)) $errors['languages'] = 'Выберите хотя бы один язык';
+        if ($contract === 0) $errors['contract'] = 'Необходимо согласие с контрактом';
 
         if (!empty($errors)) {
             setCookieJson('form_errors', $errors, time() + 3600);
@@ -69,6 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: index.php');
             exit;
         }
+
+        setcookie('form_errors', '', time() - 3600, '/');
 
         $is_new = !isset($_SESSION['user_id']);
 
@@ -90,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $_SESSION['user_id'] = $app_id;
-            $_SESSION['success_message'] = "Данные сохранены!<br><b>Логин:</b> $login<br><b>Пароль:</b> $plain_pass";
+            $_SESSION['success_message'] = "Данные сохранены!<br>Логин: <b>$login</b><br>Пароль: <b>$plain_pass</b>";
         } else {
             $app_id = $_SESSION['user_id'];
             $stmt = $pdo->prepare("UPDATE applications SET fio=?, phone=?, email=?, birth_date=?, gender=?, biography=?, contract=? WHERE id=?");
@@ -106,7 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         setCookieJson('form_values', $values, time() + 365*24*3600);
-        setcookie('save', '1', time() + 3600, '/');
         header('Location: index.php');
         exit;
     }
